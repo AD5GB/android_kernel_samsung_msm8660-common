@@ -162,6 +162,7 @@ static struct dbs_tuners {
 static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 {
 	u64 idle_time;
+<<<<<<< HEAD
 	u64 cur_wall_time;
 	u64 busy_time;
 
@@ -169,6 +170,15 @@ static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 
 	busy_time  = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
 	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
+=======
+	cputime64_t cur_wall_time;
+	u64 busy_time;
+
+	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+	busy_time = kcpustat_cpu(cpu).cpustat[CPUTIME_USER] +
+		    kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
+
+>>>>>>> 46565fa... sched/accounting: Change cpustat fields to an array
 	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
 	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
 	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
@@ -1306,10 +1316,13 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			if (dbs_tuners_ins.ignore_nice)
 				j_dbs_info->prev_cpu_nice =
 						kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+<<<<<<< HEAD
 			set_cpus_allowed(j_dbs_info->sync_thread,
 					 *cpumask_of(j));
 			if (!dbs_tuners_ins.powersave_bias)
 				atomic_set(&j_dbs_info->sync_enabled, 1);
+=======
+>>>>>>> 46565fa... sched/accounting: Change cpustat fields to an array
 		}
 		this_dbs_info->cpu = cpu;
 		this_dbs_info->rate_mult = 1;
