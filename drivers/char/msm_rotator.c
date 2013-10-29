@@ -584,6 +584,7 @@ static int get_bpp(int format)
 	case MDP_RGB_888:
 		return 3;
 
+	case MDP_YCBYCR_H2V1:
 	case MDP_YCRYCB_H2V1:
 		return 2;/* YCrYCb interleave */
 
@@ -627,6 +628,7 @@ static int msm_rotator_get_plane_sizes(uint32_t format,	uint32_t w, uint32_t h,
 	case MDP_RGB_888:
 	case MDP_RGB_565:
 	case MDP_BGR_565:
+	case MDP_YCBYCR_H2V1:
 	case MDP_YCRYCB_H2V1:
 		p->num_planes = 1;
 		p->plane_size[0] = w * h * get_bpp(format);
@@ -1022,13 +1024,22 @@ static int msm_rotator_ycrycb(struct msm_rotator_img_info *info,
 	int bpp;
 	uint32_t dst_format;
 
-	if (info->src.format == MDP_YCRYCB_H2V1) {
+	switch (info->src.format) {
+	case MDP_YCBYCR_H2V1:
+		if (info->rotations & MDP_ROT_90)
+			dst_format = MDP_Y_CBCR_H1V2;
+		else
+			dst_format = MDP_Y_CBCR_H2V1;
+		break;
+	case MDP_YCRYCB_H2V1:
 		if (info->rotations & MDP_ROT_90)
 			dst_format = MDP_Y_CRCB_H1V2;
 		else
 			dst_format = MDP_Y_CRCB_H2V1;
-	} else
+		break;
+	default:	
 		return -EINVAL;
+	}
 
 	if (info->dst.format != dst_format)
 		return -EINVAL;
