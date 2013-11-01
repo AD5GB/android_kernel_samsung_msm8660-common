@@ -320,7 +320,7 @@ static void print_page(WINDOW * win, int height, int width)
  */
 static void print_line(WINDOW * win, int row, int width)
 {
-	int y=0, x=0;
+	int y, x;
 	char *line;
 
 	line = get_line();

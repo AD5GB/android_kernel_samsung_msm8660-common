@@ -89,6 +89,9 @@ static unsigned long timer_rate;
 static int cpufreq_governor_interactivex(struct cpufreq_policy *policy,
 		unsigned int event);
 
+#ifndef CONFIG_CPU_FREQ_DEFAULT_GOV_INTERACTIVE
+static
+#endif
 struct cpufreq_governor cpufreq_gov_interactivex = {
 	.name = "InteractiveX",
 	.governor = cpufreq_governor_interactivex,
