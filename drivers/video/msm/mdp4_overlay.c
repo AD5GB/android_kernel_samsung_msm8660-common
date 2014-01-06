@@ -141,8 +141,6 @@ void  mdp4_overlay_free_base_pipe(struct msm_fb_data_type *mfd)
 
 static struct ion_client *display_iclient;
 
-static int mdp4_overlay_cache_reg(struct msm_fb_data_type *mfd,
-				u32 offset, u32 val);
 
 /*
  * mdp4_overlay_iommu_unmap_freelist()
@@ -914,7 +912,7 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 	uint32 frame_size, src_size, src_xy, dst_size, dst_xy;
 	uint32 format, pattern, luma_offset, chroma_offset;
 	uint32 mask;
-	int pnum, ptype, i, ret;
+	int pnum, ptype, i;
 	uint32_t block;
 
 	pnum = pipe->pipe_num - OVERLAY_PIPE_VG1; /* start from 0 */
@@ -997,34 +995,13 @@ void mdp4_overlay_vg_setup(struct mdp4_overlay_pipe *pipe)
 	outpdw(vg_base + 0x0008, dst_size);	/* MDP_RGB_DST_SIZE */
 	outpdw(vg_base + 0x000c, dst_xy);	/* MDP_RGB_DST_XY */
 
+	/* TILE frame size */
 	if (pipe->frame_format != MDP4_FRAME_FORMAT_LINEAR) {
-		struct mdp4_overlay_pipe *real_pipe;
-		u32 psize, csize;
-
-		ret = mdp4_overlay_cache_reg(pipe->mfd,
-				(u32)(vg_base + 0x0048), frame_size);
-		if (ret) {
-			/*
-			 * video tile frame size register is NOT double
-			 * buffered. When this register updated, it kicks
-			 * in immediatly. During transition from smaller
-			 * resolution to higher resolution it may have
-			 * possibility that mdp still fetch from smaller
-			 * resolution buffer with new higher resolution
-			 * frame size. This will cause iommu page fault.
-			 */
-			real_pipe = mdp4_overlay_ndx2pipe(pipe->pipe_ndx);
-			psize = real_pipe->prev_src_height *
-					real_pipe->prev_src_width;
-			csize = pipe->src_height * pipe->src_width;
-			if (psize && (csize > psize)) {
-				frame_size = (real_pipe->prev_src_height << 16 |
-						real_pipe->prev_src_width);
-			}
+		if ((ctrl->panel_mode & MDP4_PANEL_DSI_CMD && pipe->mixer_num == 0) ||
+			(ctrl->panel_mode & MDP4_PANEL_WRITEBACK && pipe->mixer_num == 2))
 			outpdw(vg_base + 0x0048, frame_size);
-			real_pipe->prev_src_height = pipe->src_height;
-			real_pipe->prev_src_width = pipe->src_width;
-		}
+		else
+			pipe->frame_size = frame_size;
 	}
 
 	/*
@@ -1917,11 +1894,23 @@ void mdp4_overlay_borderfill_stage_up(struct mdp4_overlay_pipe *pipe)
 
 	bspipe = ctrl->stage[mixer][MDP4_MIXER_STAGE_BASE];
 
+        if (bspipe == NULL) {
+                pr_err("%s: no base layer at mixer=%d\n",
+                                __func__, mixer);
+                return;
+        }
+
 	/*
 	 * bspipe is clone here
 	 * get real pipe
 	 */
 	bspipe = mdp4_overlay_ndx2pipe(bspipe->pipe_ndx);
+
+        if (bspipe == NULL) {
+                pr_err("%s: mdp4_overlay_ndx2pipe returned null pipe ndx\n",
+                                __func__);
+                return;
+        }
 
 	/* save original base layer */
 	ctrl->baselayer[mixer] = bspipe;
@@ -3035,8 +3024,12 @@ int mdp4_calc_blt_mdp_bw(struct msm_fb_data_type *mfd,
 
 static int mdp4_axi_port_read_client_pipe(struct mdp4_overlay_pipe *pipe)
 {
-	u32 data = inpdw(MDP_BASE + 0x0404);
-	u32 port = 0;
+	u32 data = 0, port = 0;
+
+	mdp_clk_ctrl(1);
+	data = inpdw(MDP_BASE + 0x0404);
+	mdp_clk_ctrl(0);
+
 	if (pipe->pipe_ndx == 1) /* rgb1 */
 		port = (data & 0x0010) ? 1 : 0;
 	else if (pipe->pipe_ndx == 2) /* rgb2 */
@@ -3052,8 +3045,12 @@ static int mdp4_axi_port_read_client_pipe(struct mdp4_overlay_pipe *pipe)
 
 static int mdp4_axi_port_read_client_mixer(int mixer)
 {
-	u32 data = inpdw(MDP_BASE + 0x0404);
-	u32 port = 0;
+	u32 data = 0, port = 0;
+
+	mdp_clk_ctrl(1);
+	data = inpdw(MDP_BASE + 0x0404);
+	mdp_clk_ctrl(0);
+
 	if (mixer == MDP4_MIXER0) /* dmap */
 		port = (data & 0x1000) ? 1 : 0;
 	else if (mixer == MDP4_MIXER1) /* dmae */
@@ -3065,8 +3062,12 @@ static int mdp4_axi_port_read_client_mixer(int mixer)
 
 static int mdp4_axi_port_write_client_mixer(int mixer)
 {
-	u32 data = inpdw(MDP_BASE + 0x0408);
-	u32 port = 0;
+	u32 data = 0, port = 0;
+
+	mdp_clk_ctrl(1);
+	data = inpdw(MDP_BASE + 0x0408);
+	mdp_clk_ctrl(0);
+
 	if (mixer == MDP4_MIXER0) /* dmap */
 		port = (data & 0x0001) ? 1 : 0;
 	else if (mixer == MDP4_MIXER1) /* dmae */
@@ -3831,6 +3832,24 @@ void mdp4_overlay_dma_commit(int mixer)
 	* non double buffer register update here
 	* perf level, new clock rate should be done here
 	*/
+	struct mdp4_overlay_pipe *pipe;
+	char *vg_base;
+	int i, pnum;
+	for (i = 0; i < OVERLAY_PIPE_MAX; i++, pipe++) {
+		pipe = ctrl->stage[mixer][i];
+		if (pipe) {
+			if (pipe->pipe_type == OVERLAY_TYPE_VIDEO &&
+						(pipe->frame_format !=
+						MDP4_FRAME_FORMAT_LINEAR) &&
+						pipe->frame_size) {
+				pnum = pipe->pipe_num - OVERLAY_PIPE_VG1;
+				vg_base = MDP_BASE + MDP4_VIDEO_BASE;
+				vg_base += (MDP4_VIDEO_OFF * pnum);
+				outpdw(vg_base + 0x0048, pipe->frame_size);
+				pipe->frame_size = 0;
+			}
+		}
+	}
 }
 
 /*
@@ -4301,26 +4320,4 @@ int mdp4_overlay_reset()
 	memset(&perf_request, 0, sizeof(perf_request));
 	memset(&perf_current, 0, sizeof(perf_current));
 	return 0;
-}
-
-static int mdp4_overlay_cache_reg(struct msm_fb_data_type *mfd,
-					u32 offset, u32 val)
-{
-	if ((!mfd) || (!mfd->cache_reg_en) ||
-		(mfd->cached_reg_cnt >= MDP_MAX_CACHED_REG)) {
-		pr_debug("%s: exceed max cached reg number", __func__);
-		return -EINVAL;
-	}
-	mfd->cached_reg[mfd->cached_reg_cnt].reg = offset;
-	mfd->cached_reg[mfd->cached_reg_cnt].val = val;
-	mfd->cached_reg_cnt++;
-	return 0;
-}
-
-void mdp4_overlay_update_cached_reg(struct msm_fb_data_type *mfd)
-{
-	int i;
-	for (i = 0; i < mfd->cached_reg_cnt; i++)
-		outpdw((char *)mfd->cached_reg[i].reg,  mfd->cached_reg[i].val);
-	mfd->cached_reg_cnt = 0;
 }
