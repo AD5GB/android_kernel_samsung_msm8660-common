@@ -1,12 +1,12 @@
 // MELFAS HEX to C converter v1.6 [2008.05.25]
 
-const UINT16 MELFAS_binary_nLength = 0x7C00;// 31.0 KBytes ( 31744 Bytes )
+const UINT16 MELFAS_binary_nLength = 0x7C00;			// 31.0 KBytes ( 31744 Bytes ) 
 
 const  UINT8 MELFAS_binary[] = {
 
-// Model name       :
-// Module revision  :
-// Firmware version :
+	// Model name       : ­
+	// Module revision  : ­
+	// Firmware version : ­
 
 0x00, 0x20, 0x00, 0x20, 0xB1, 0x02, 0x00, 0x00, 0x71, 0x02, 0x00, 0x00, 
 0x75, 0x02, 0x00, 0x00, 0x79, 0x02, 0x00, 0x00, 0x7D, 0x02, 0x00, 0x00, 
