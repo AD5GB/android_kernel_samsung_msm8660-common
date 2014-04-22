@@ -4,7 +4,7 @@ const uint16_t MELFAS_binary_nLength = 0x7C00;			// 31.0 KBytes ( 31744 Bytes )
 
 const  uint8_t MELFAS_binary[] = {
 
-	// Model name       : 
+	// Model name       : έπ<!G^
 	// Module revision  : R91
 	// Firmware version : VB07
 
