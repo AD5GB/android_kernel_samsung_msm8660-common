@@ -277,10 +277,18 @@ static int mdp4_overlay_writeback_update(struct msm_fb_data_type *mfd)
 
 	mdp4_calc_blt_mdp_bw(mfd, pipe);
 
+<<<<<<< HEAD
        if (mfd->display_iova)
            pipe->srcp0_addr = mfd->display_iova + buf_offset;
        else
            pipe->srcp0_addr = (uint32)(buf + buf_offset);
+=======
+	if (mfd->display_iofa) 
+		pipe->srcp0_addr = mfd->display_iova + buf_offset;
+    else
+		pipe->srcp0_addr = (uint32)(buf + buf_offset);
+	
+>>>>>>> 61aea00... Hand-merge some of CM's recent changes.
 
 	mdp4_mixer_stage_up(pipe, 0);
 
