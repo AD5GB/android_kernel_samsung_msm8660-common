@@ -154,7 +154,7 @@ static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
 	busy_time = cputime64_add(busy_time, 
                     kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL]);
 	busy_time = cputime64_add(busy_time, 
-                    kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
+                    kcpustat_cpu(cpu).cpustat[CPUTIME_NICE]);
 
 	idle_time = cputime64_sub(cur_wall_time, busy_time);
 	if (wall)
