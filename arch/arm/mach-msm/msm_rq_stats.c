@@ -237,7 +237,6 @@ static int system_suspend_handler(struct notifier_block *nb,
 }
 
 
-<<<<<<< HEAD
 #ifdef CONFIG_MSM_MPDEC
 unsigned int get_rq_info(void)
 {
@@ -255,7 +254,6 @@ unsigned long flags = 0;
 }
 EXPORT_SYMBOL(get_rq_info);
 #endif  
-=======
 static ssize_t hotplug_disable_show(struct kobject *kobj,
 		struct kobj_attribute *attr, char *buf)
 {
@@ -277,7 +275,6 @@ static void def_work_fn(struct work_struct *work)
 	/* Notify polling threads on change of value */
 	sysfs_notify(rq_info.kobj, NULL, "def_timer_ms");
 }
->>>>>>> 7b60ad0... Merge branch 'jb_1.9.6' of git://codeaurora.org/kernel/msm into cm-11.0
 
 #ifdef CONFIG_SEC_DVFS_DUAL
 static int is_dual_locked = 0;
