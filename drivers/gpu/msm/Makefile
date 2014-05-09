@@ -1,4 +1,4 @@
-ccflags-y := -Iinclude/drm -Idrivers/gpu/msm -O3 -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mtune=cortex-a8 -marm -march=armv7-a -mfpu=neon -ftree-vectorize
+ccflags-y := -Iinclude/drm -Idrivers/gpu/msm
 
 msm_kgsl_core-y = \
 	kgsl.o \
