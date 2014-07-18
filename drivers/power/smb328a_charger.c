@@ -327,7 +327,7 @@ static void smb328a_charger_function_conrol(struct i2c_client *client)
 #endif
 
 			set_data = 0xb0; /* input 1A */
-		else if (chip->chg_mode == CHG_MODE_MISC)
+      } else if (chip->chg_mode == CHG_MODE_MISC)
 			set_data = 0x50; /* input 700mA */
 		else
 			set_data = 0x10; /* input 450mA */
