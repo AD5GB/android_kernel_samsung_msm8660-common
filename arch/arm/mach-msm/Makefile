@@ -314,6 +314,7 @@ obj-$(CONFIG_ARCH_MSM8960) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_APQ8064) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_MSM9615) += gpiomux-v2.o gpiomux.o
 obj-$(CONFIG_ARCH_MSMCOPPER) += gpiomux-v2.o gpiomux.o
+obj-$(CONFIG_FORCE_FAST_CHARGE) += fastchg.o
 
 ifdef CONFIG_FSM9XXX_TLMM
 obj-y   += gpio-fsm9xxx.o
