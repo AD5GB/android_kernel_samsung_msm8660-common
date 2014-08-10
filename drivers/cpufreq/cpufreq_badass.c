@@ -188,28 +188,26 @@ unsigned int gpu_busy_clr_threshold;
 #endif
 };
 
-static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
-cputime64_t *wall)
+static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 {
-cputime64_t idle_time;
-cputime64_t cur_wall_time;
-cputime64_t busy_time;
+	u64 idle_time;
+	cputime64_t cur_wall_time;
+	u64 busy_time;
 
-cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
-busy_time = cputime64_add(kcpustat_cpu(cpu).cpustat[CPUTIME_USER],
-kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM]);
+	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
+	busy_time = kcpustat_cpu(cpu).cpustat[CPUTIME_USER] +
+		    kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
 
-busy_time = cputime64_add(busy_time, kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ]);
-busy_time = cputime64_add(busy_time, 
-            kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ]);
-busy_time = cputime64_add(busy_time, kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL]);
-busy_time = cputime64_add(busy_time, kcpustat_cpu(cpu).cpustat[CPUTIME_NICE]);
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
+	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
 
-idle_time = cputime64_sub(cur_wall_time, busy_time);
-if (wall)
-*wall = (cputime64_t)jiffies_to_usecs(cur_wall_time);
+	idle_time = cputime64_sub(cur_wall_time, busy_time);
+	if (wall)
+		*wall = jiffies_to_usecs(cur_wall_time);
 
-return (cputime64_t)jiffies_to_usecs(idle_time);
+	return jiffies_to_usecs(idle_time);
 }
 
 static inline cputime64_t get_cpu_idle_time(unsigned int cpu, cputime64_t *wall)
@@ -505,7 +503,7 @@ bds_info = &per_cpu(od_cpu_bds_info, j);
 bds_info->prev_cpu_idle = get_cpu_idle_time(j,
 &bds_info->prev_cpu_wall);
 if (bds_tuners_ins.ignore_nice)
-    bds_info->prev_cpu_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
+bds_info->prev_cpu_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE];
 
 }
 return count;
@@ -888,11 +886,10 @@ j_bds_info->prev_cpu_iowait);
 j_bds_info->prev_cpu_iowait = cur_iowait_time;
 
 if (bds_tuners_ins.ignore_nice) {
-cputime64_t cur_nice;
+u64 cur_nice;
 unsigned long cur_nice_jiffies;
 
-cur_nice = cputime64_sub(kcpustat_cpu(j).cpustat[CPUTIME_NICE],
-j_bds_info->prev_cpu_nice);
+cur_nice = kcpustat_cpu(j).cpustat[CPUTIME_NICE] - j_bds_info->prev_cpu_nice;
 /*
 * Assumption: nice time between sampling periods will
 * be less than 2^32 jiffies for 32 bit sys

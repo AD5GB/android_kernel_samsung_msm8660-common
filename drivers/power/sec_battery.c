@@ -519,7 +519,6 @@ struct sec_bat_info {
 	struct power_supply psy_usb;
 	struct power_supply psy_ac;
 
-	struct wake_lock vbus_wake_lock;
 	struct wake_lock monitor_wake_lock;
 	struct wake_lock cable_wake_lock;
 	struct wake_lock test_wake_lock;
@@ -779,7 +778,7 @@ static int sec_bat_check_detbat(struct sec_bat_info *info)
 
 		pr_info("%s : vf adc : %d\n", __func__, adc_physical);
 
-		if (adc_physical > 500 && adc_physical < 900)
+		if (adc_physical > 500 && adc_physical < 1200)
 			value.intval = BAT_DETECTED;
 		else
 			value.intval = BAT_NOT_DETECTED;
@@ -817,7 +816,7 @@ static int sec_bat_check_detbat(struct sec_bat_info *info)
 	defined(CONFIG_USA_MODEL_SGH_T769) || \
 	defined(CONFIG_USA_MODEL_SGH_I577) || \
 	defined(CONFIG_CAN_MODEL_SGH_I577R)
-	if (adc_physical > 500 && adc_physical < 900)
+	if (adc_physical > 500 && adc_physical < 1200)
 #elif defined(CONFIG_USA_MODEL_SGH_I717)
 	if ((get_hw_rev() == 0x01) &&
 		(adc_physical > 1290 && adc_physical < 1800))
@@ -2439,6 +2438,8 @@ static void sec_bat_update_info(struct sec_bat_info *info)
 	sec_bat_notify_vcell2charger(info);
 }
 
+int cable_type = 0;
+
 static int sec_bat_enable_charging(struct sec_bat_info *info, bool enable)
 {
 	struct power_supply *psy = power_supply_get_by_name(info->charger_name);
@@ -2459,16 +2460,17 @@ static int sec_bat_enable_charging(struct sec_bat_info *info, bool enable)
 		switch (info->cable_type) {
 		case CABLE_TYPE_USB:
 			val_type.intval = POWER_SUPPLY_STATUS_CHARGING;
-			val_chg_current.intval = 500; /* USB 500 mode */
-			info->full_cond_count = USB_FULL_COND_COUNT;
+			val_chg_current.intval = 1200; /* USB 1200 mode */
+			info->full_cond_count = FULL_CHG_COND_COUNT;
 			info->full_cond_voltage = USB_FULL_COND_VOLTAGE;
 			break;
 		case CABLE_TYPE_AC:
 		case CABLE_TYPE_CARDOCK:
 		case CABLE_TYPE_UARTOFF:
+		case CABLE_TYPE_UNKNOWN:
 			val_type.intval = POWER_SUPPLY_STATUS_CHARGING;
-			 /* input : 900mA, output : 900mA */
-			val_chg_current.intval = 900;
+			 /* input : 1200mA, output : 1200mA */
+			val_chg_current.intval = 1200;
 			info->full_cond_count = FULL_CHG_COND_COUNT;
 			info->full_cond_voltage = FULL_CHARGE_COND_VOLTAGE;
 			break;
@@ -2479,16 +2481,27 @@ static int sec_bat_enable_charging(struct sec_bat_info *info, bool enable)
 			info->full_cond_count = FULL_CHG_COND_COUNT;
 			info->full_cond_voltage = FULL_CHARGE_COND_VOLTAGE;
 			break;
-		case CABLE_TYPE_UNKNOWN:
-			val_type.intval = POWER_SUPPLY_STATUS_CHARGING;
-			 /* input : 450, output : 500mA */
-			val_chg_current.intval = 450;
-			info->full_cond_count = USB_FULL_COND_COUNT;
-			info->full_cond_voltage = USB_FULL_COND_VOLTAGE;
-			break;
 		default:
 			dev_err(info->dev, "%s: Invalid func use\n", __func__);
 			return -EINVAL;
+		}
+
+		switch (info->cable_type) {
+			case CABLE_TYPE_NONE:
+				cable_type = 0;
+				break;
+			case CABLE_TYPE_USB:
+				cable_type = 1;
+				break;
+			case CABLE_TYPE_AC:
+			case CABLE_TYPE_CARDOCK:
+			case CABLE_TYPE_UARTOFF:
+			case CABLE_TYPE_UNKNOWN:
+				cable_type = 2;
+				break;
+			case CABLE_TYPE_MISC:
+				cable_type = 3;
+				break;
 		}
 
 		/* Set charging current */
@@ -2642,7 +2655,6 @@ static void sec_bat_cable_work(struct work_struct *work)
 			pr_info("cable none : vdcin ok, skip!!!\n");
 			return;
 		}
-		wake_lock_timeout(&info->vbus_wake_lock, 5 * HZ);
 		cancel_delayed_work(&info->measure_work);
 		info->batt_full_status = BATT_NOT_FULL;
 		info->recharging_status = false;
@@ -2677,7 +2689,6 @@ static void sec_bat_cable_work(struct work_struct *work)
 #else
 		if (!info->dcin_intr_triggered && !info->lpm_chg_mode) {
 #endif
-			wake_lock_timeout(&info->vbus_wake_lock, 5 * HZ);
 			pr_info("%s : dock inserted, "
 				"but dcin nok skip charging!\n", __func__);
 			sec_bat_enable_charging(info, true);
@@ -2702,13 +2713,9 @@ static void sec_bat_cable_work(struct work_struct *work)
 		}
 #endif
 	case CABLE_TYPE_UNKNOWN:
-#if defined(CONFIG_TOUCHSCREEN_QT602240) || defined(CONFIG_TOUCHSCREEN_MXT768E)
-		tsp_set_unknown_charging_cable(true);
-#endif
 	case CABLE_TYPE_USB:
 	case CABLE_TYPE_AC:
 		/* TODO : check DCIN state again*/
-		wake_lock(&info->vbus_wake_lock);
 		cancel_delayed_work(&info->measure_work);
 		info->charging_status = POWER_SUPPLY_STATUS_CHARGING;
 #ifdef ADJUST_RCOMP_WITH_CHARGING_STATUS
@@ -3138,12 +3145,12 @@ static void sec_bat_measure_work(struct work_struct *work)
 							info, 1000);
 					}
 				} else {
-					if (set_chg_current != 900) {
+					if (set_chg_current != 1200) {
 						pr_info("[SC-03D] %s : "
 							"adjust current to"
 							" 0.9A\n", __func__);
 						sec_bat_adjust_charging_current(
-							info, 900);
+							info, 1200);
 					}
 				}
 			} else {
@@ -3178,11 +3185,11 @@ static void sec_bat_measure_work(struct work_struct *work)
 						info, 1000);
 				}
 			} else {
-				if (set_chg_current != 900) {
+				if (set_chg_current != 1200) {
 					pr_info("%s : adjust curretn to 0.9A\n",
 						__func__);
 					sec_bat_adjust_charging_current(
-						info, 900);
+						info, 1200);
 				}
 			}
 		} else {
@@ -4076,8 +4083,6 @@ static __devinit int sec_bat_probe(struct platform_device *pdev)
 	info->psy_ac.num_properties = ARRAY_SIZE(sec_power_props),
 	info->psy_ac.get_property = sec_ac_get_property;
 
-	wake_lock_init(&info->vbus_wake_lock, WAKE_LOCK_SUSPEND,
-		       "vbus_present");
 	wake_lock_init(&info->monitor_wake_lock, WAKE_LOCK_SUSPEND,
 		       "sec-battery-monitor");
 	wake_lock_init(&info->cable_wake_lock, WAKE_LOCK_SUSPEND,
@@ -4304,7 +4309,6 @@ err_adc_open_1:
 	adc_channel_close(info->batt_adc_chan[0].adc_handle);
 err_adc_open_0:
 #endif
-	wake_lock_destroy(&info->vbus_wake_lock);
 	wake_lock_destroy(&info->monitor_wake_lock);
 	wake_lock_destroy(&info->cable_wake_lock);
 	wake_lock_destroy(&info->test_wake_lock);
@@ -4352,7 +4356,6 @@ static int __devexit sec_bat_remove(struct platform_device *pdev)
 	adc_channel_close(info->batt_adc_chan[0].adc_handle);
 #endif
 
-	wake_lock_destroy(&info->vbus_wake_lock);
 	wake_lock_destroy(&info->monitor_wake_lock);
 	wake_lock_destroy(&info->cable_wake_lock);
 	wake_lock_destroy(&info->test_wake_lock);

@@ -161,10 +161,8 @@ struct inodes_stat_t {
 #define READA			RWA_MASK
 
 #define READ_SYNC		(READ | REQ_SYNC)
-#define READ_META		(READ | REQ_META)
 #define WRITE_SYNC		(WRITE | REQ_SYNC | REQ_NOIDLE)
 #define WRITE_ODIRECT		(WRITE | REQ_SYNC)
-#define WRITE_META		(WRITE | REQ_META)
 #define WRITE_FLUSH		(WRITE | REQ_SYNC | REQ_NOIDLE | REQ_FLUSH)
 #define WRITE_FUA		(WRITE | REQ_SYNC | REQ_NOIDLE | REQ_FUA)
 #define WRITE_FLUSH_FUA		(WRITE | REQ_SYNC | REQ_NOIDLE | REQ_FLUSH | REQ_FUA)
@@ -528,30 +526,119 @@ struct writeback_control;
 enum migrate_mode;
 
 struct iov_iter {
-	const struct iovec *iov;
+	struct iov_iter_ops *ops;
+	unsigned long data;
 	unsigned long nr_segs;
 	size_t iov_offset;
 	size_t count;
 };
 
-size_t iov_iter_copy_from_user_atomic(struct page *page,
-		struct iov_iter *i, unsigned long offset, size_t bytes);
-size_t iov_iter_copy_from_user(struct page *page,
-		struct iov_iter *i, unsigned long offset, size_t bytes);
-void iov_iter_advance(struct iov_iter *i, size_t bytes);
-int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes);
-size_t iov_iter_single_seg_count(struct iov_iter *i);
+struct iov_iter_ops {
+	size_t (*ii_copy_to_user_atomic)(struct page *, struct iov_iter *,
+					 unsigned long, size_t);
+	size_t (*ii_copy_to_user)(struct page *, struct iov_iter *,
+				  unsigned long, size_t);
+	size_t (*ii_copy_from_user_atomic)(struct page *, struct iov_iter *,
+					   unsigned long, size_t);
+	size_t (*ii_copy_from_user)(struct page *, struct iov_iter *,
+					  unsigned long, size_t);
+	void (*ii_advance)(struct iov_iter *, size_t);
+	int (*ii_fault_in_readable)(struct iov_iter *, size_t);
+	size_t (*ii_single_seg_count)(struct iov_iter *);
+	int (*ii_shorten)(struct iov_iter *, size_t);
+};
 
-static inline void iov_iter_init(struct iov_iter *i,
-			const struct iovec *iov, unsigned long nr_segs,
-			size_t count, size_t written)
+static inline size_t iov_iter_copy_to_user_atomic(struct page *page,
+		struct iov_iter *i, unsigned long offset, size_t bytes)
 {
-	i->iov = iov;
+	return i->ops->ii_copy_to_user_atomic(page, i, offset, bytes);
+}
+static inline size_t iov_iter_copy_to_user(struct page *page,
+		struct iov_iter *i, unsigned long offset, size_t bytes)
+{
+	return i->ops->ii_copy_to_user(page, i, offset, bytes);
+}
+static inline size_t iov_iter_copy_from_user_atomic(struct page *page,
+		struct iov_iter *i, unsigned long offset, size_t bytes)
+{
+	return i->ops->ii_copy_from_user_atomic(page, i, offset, bytes);
+}
+static inline size_t iov_iter_copy_from_user(struct page *page,
+		struct iov_iter *i, unsigned long offset, size_t bytes)
+{
+	return i->ops->ii_copy_from_user(page, i, offset, bytes);
+}
+static inline void iov_iter_advance(struct iov_iter *i, size_t bytes)
+{
+	return i->ops->ii_advance(i, bytes);
+}
+static inline int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes)
+{
+	return i->ops->ii_fault_in_readable(i, bytes);
+}
+static inline size_t iov_iter_single_seg_count(struct iov_iter *i)
+{
+	return i->ops->ii_single_seg_count(i);
+}
+static inline int iov_iter_shorten(struct iov_iter *i, size_t count)
+{
+	return i->ops->ii_shorten(i, count);
+}
+
+#ifdef CONFIG_BLOCK
+extern struct iov_iter_ops ii_bvec_ops;
+
+struct bio_vec;
+static inline void iov_iter_init_bvec(struct iov_iter *i,
+				      struct bio_vec *bvec,
+				      unsigned long nr_segs,
+				      size_t count, size_t written)
+{
+	i->ops = &ii_bvec_ops;
+	i->data = (unsigned long)bvec;
 	i->nr_segs = nr_segs;
 	i->iov_offset = 0;
 	i->count = count + written;
 
 	iov_iter_advance(i, written);
+}
+
+static inline int iov_iter_has_bvec(struct iov_iter *i)
+{
+	return i->ops == &ii_bvec_ops;
+}
+
+static inline struct bio_vec *iov_iter_bvec(struct iov_iter *i)
+{
+	BUG_ON(!iov_iter_has_bvec(i));
+	return (struct bio_vec *)i->data;
+}
+#endif
+
+extern struct iov_iter_ops ii_iovec_ops;
+
+static inline void iov_iter_init(struct iov_iter *i,
+			const struct iovec *iov, unsigned long nr_segs,
+			size_t count, size_t written)
+{
+	i->ops = &ii_iovec_ops;
+	i->data = (unsigned long)iov;
+	i->nr_segs = nr_segs;
+	i->iov_offset = 0;
+	i->count = count + written;
+
+	iov_iter_advance(i, written);
+}
+
+static inline int iov_iter_has_iovec(struct iov_iter *i)
+{
+	return i->ops == &ii_iovec_ops;
+}
+
+static inline struct iovec *iov_iter_iovec(struct iov_iter *i)
+{
+	BUG_ON(!iov_iter_has_iovec(i));
+	return (struct iovec *)i->data;
 }
 
 static inline size_t iov_iter_count(struct iov_iter *i)
@@ -1565,7 +1652,7 @@ struct file_operations {
 	int (*open) (struct inode *, struct file *);
 	int (*flush) (struct file *, fl_owner_t id);
 	int (*release) (struct inode *, struct file *);
-	int (*fsync) (struct file *, int datasync);
+	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
 	int (*aio_fsync) (struct kiocb *, int datasync);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);
@@ -2076,6 +2163,7 @@ static inline int thaw_bdev(struct block_device *bdev, struct super_block *sb)
 }
 #endif
 extern int sync_filesystem(struct super_block *);
+extern void sync_filesystems(int wait);
 extern const struct file_operations def_blk_fops;
 extern const struct file_operations def_chr_fops;
 extern const struct file_operations bad_sock_fops;
@@ -2348,7 +2436,8 @@ extern int generic_segment_checks(const struct iovec *iov,
 /* fs/block_dev.c */
 extern ssize_t blkdev_aio_write(struct kiocb *iocb, const struct iovec *iov,
 				unsigned long nr_segs, loff_t pos);
-extern int blkdev_fsync(struct file *filp, int datasync);
+extern int blkdev_fsync(struct file *filp, loff_t start, loff_t end,
+			int datasync);
 
 /* fs/splice.c */
 extern ssize_t generic_file_splice_read(struct file *, loff_t *,
@@ -2477,7 +2566,7 @@ extern int simple_link(struct dentry *, struct inode *, struct dentry *);
 extern int simple_unlink(struct inode *, struct dentry *);
 extern int simple_rmdir(struct inode *, struct dentry *);
 extern int simple_rename(struct inode *, struct dentry *, struct inode *, struct dentry *);
-extern int noop_fsync(struct file *, int);
+extern int noop_fsync(struct file *, loff_t, loff_t, int);
 extern int simple_empty(struct dentry *);
 extern int simple_readpage(struct file *file, struct page *page);
 extern int simple_write_begin(struct file *file, struct address_space *mapping,
@@ -2502,7 +2591,7 @@ extern ssize_t simple_read_from_buffer(void __user *to, size_t count,
 extern ssize_t simple_write_to_buffer(void *to, size_t available, loff_t *ppos,
 		const void __user *from, size_t count);
 
-extern int generic_file_fsync(struct file *, int);
+extern int generic_file_fsync(struct file *, loff_t, loff_t, int);
 
 extern int generic_check_addressable(unsigned, u64);
 
