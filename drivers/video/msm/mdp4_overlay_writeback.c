@@ -281,7 +281,6 @@ static int mdp4_overlay_writeback_update(struct msm_fb_data_type *mfd)
            pipe->srcp0_addr = mfd->display_iova + buf_offset;
        else
            pipe->srcp0_addr = (uint32)(buf + buf_offset);
-	if (mfd->display_iofa) 
 		pipe->srcp0_addr = mfd->display_iova + buf_offset;
     else
 
