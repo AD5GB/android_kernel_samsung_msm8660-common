@@ -41,6 +41,7 @@
 #include <linux/i2c/isa1200.h>
 #include <linux/dma-mapping.h>
 #include <linux/i2c/bq27520.h>
+#include <linux/fastchg.h> 
 
 #ifdef CONFIG_TOUCHSCREEN_MELFAS
 #define TOUCHSCREEN_IRQ 		125  
@@ -272,6 +273,10 @@
 
 #ifdef CONFIG_ION_MSM
 static struct platform_device ion_dev;
+#endif
+
+#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_2_PHASE
+int set_two_phase_freq(int cpufreq);
 #endif
 
 #if defined (CONFIG_OPTICAL_GP2A) || defined(CONFIG_OPTICAL_TAOS)
@@ -4749,9 +4754,20 @@ static void fsa9480_usb_cb(bool attached)
 
 #ifdef CONFIG_BATTERY_SEC
 	switch(set_cable_status) {
+#ifdef CONFIG_FORCE_FAST_CHARGE
+    	case CABLE_TYPE_USB:
+	if (force_fast_charge != 0) {
+	value.intval = POWER_SUPPLY_TYPE_MAINS;
+	printk(KERN_ERR "fast charce is enabled, value: %d\n", force_fast_charge);
+	} else {
+	value.intval = POWER_SUPPLY_TYPE_USB;
+	}
+	break;
+#else
 		case CABLE_TYPE_USB:
 			value.intval = POWER_SUPPLY_TYPE_USB;
 			break;
+#endif 
 		case CABLE_TYPE_NONE:
 			value.intval = POWER_SUPPLY_TYPE_BATTERY;
 			break;
@@ -16863,6 +16879,10 @@ static void __init msm8x60_init(struct msm_board_data *board_data)
 			machine_is_msm8x60_fluid() ||
 			machine_is_msm8x60_dragon())
 		msm8x60_init_ebi2();
+
+#ifdef CONFIG_CPU_FREQ_GOV_ONDEMAND_2_PHASE
+	set_two_phase_freq(1134000);
+#endif
 	msm8x60_init_tlmm();
 #ifdef CONFIG_BATTERY_SEC
 	if(is_lpm_boot)
